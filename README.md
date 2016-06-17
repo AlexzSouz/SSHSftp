@@ -6,7 +6,7 @@ This API uses [PSFTP] developed by [these fellas].
 
 ## Get Started
 
-// TODO : More details will be add soon regarind how to use the SSHSFTP nuget package.
+// TODO : More details will be added soon regarind how to use the SSHSFTP nuget package.
 
 ## Versions
 
