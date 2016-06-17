@@ -11,8 +11,6 @@ namespace PuttySSHnet46
     {
         #region Fields
 
-        private Process _processSession;
-
         private string _ipAddress;
         private string _username;
         private string _password;
@@ -78,60 +76,12 @@ namespace PuttySSHnet46
 
         #region Methods
 
-        private void processDataReceived(Action<string> callback)
-        {
-            _processSession.OutputDataReceived += delegate (object sender, DataReceivedEventArgs e)
-            {
-                callback(e.Data);
-            };
-        }
-        
-        private void download(string path, string pattern = null)
-        {
-            lock (_locker)
-            {
-                if (string.IsNullOrWhiteSpace(path))
-                {
-                    throw new ArgumentNullException(nameof(path));
-                }
-
-                bool isPathNotFoundException = false;
-                string exceptionMessage = string.Empty;
-
-                _processSession.BeginOutputReadLine();
-                var localResetEventSlim = GetThreadResetEventSlim();
-
-                processDataReceived(data =>
-                {
-                    if (data.Contains("no such file or directory"))
-                    {
-                        isPathNotFoundException = true;
-                        exceptionMessage = data;
-                    }
-
-                    localResetEventSlim.Set();
-                });
-
-                var command = (pattern == null) ? $"get {path}" : $"mget {path}/{pattern}";
-
-                _processSession.StandardInput.WriteLine(command);
-                localResetEventSlim.Wait();
-
-                _processSession.CancelOutputRead();
-
-                if (isPathNotFoundException)
-                {
-                    throw new SftpPathNotFoundException(exceptionMessage);
-                }
-            }
-        }
-
         /// <summary>
         /// IDisposable method to initialize a SSH connection
         /// SSH Connection [Simple]: PSFTP.EXE -l {username} -pw {password} {192.168.0.1}
         /// </summary>
         /// <returns></returns>
-        public IDisposable Connect()
+        public override IDisposable Connect()
         {
             // TODO : Move it from here
             if (!IsValidIPAddress(_ipAddress))
@@ -162,11 +112,11 @@ namespace PuttySSHnet46
 
             return this;
         }
-        
+
         /// <summary>
         /// Thread-Sage method to close SSH connection
         /// </summary>
-        public void Close()
+        public override void Close()
         {
             lock (_locker)
             {
@@ -179,9 +129,7 @@ namespace PuttySSHnet46
         /// </summary>
         /// <typeparam name="TBase"></typeparam>
         /// <typeparam name="TProvider"></typeparam>
-        public void OverrideProvider<TBase, TProvider>()
-            where TBase : class
-            where TProvider : class, TBase
+        public override void OverrideProvider<TBase, TProvider>()
         {
             IoC.RegisterType<TBase, TProvider>();
         }
@@ -190,7 +138,7 @@ namespace PuttySSHnet46
         /// Thread-Safe method to set the LOCAL directory path
         /// </summary>
         /// <param name="directoryPath"></param>
-        public void SetLocalDirectory(string directoryPath)
+        public override void SetLocalDirectory(string directoryPath)
         {
             lock (_locker)
             {
@@ -227,7 +175,7 @@ namespace PuttySSHnet46
         /// Thread-Safe method to load a Directory or a File (Explicit) as directory
         /// </summary>
         /// <param name="directoryPath">Path to load</param>
-        public void LoadDirectory(string directoryPath, SftpPathType pathType = SftpPathType.DirectoryPath)
+        public override void LoadDirectory(string directoryPath, SftpPathType pathType = SftpPathType.DirectoryPath)
         {
             lock (_locker)
             {
@@ -281,7 +229,7 @@ namespace PuttySSHnet46
         /// </summary>
         /// <param name="fileOrDirectoryPath">File or Directory path for validation</param>
         /// <returns></returns>
-        public bool Exists(string fileOrDirectoryPath, SftpPathType pathType)
+        public override bool Exists(string fileOrDirectoryPath, SftpPathType pathType)
         {
             lock (_locker)
             {
@@ -302,12 +250,12 @@ namespace PuttySSHnet46
                 }
             }
         }
-                
+
         /// <summary>
         /// Thread-Safe method to Download a file to LOCAL Environment Directory
         /// </summary>
         /// <param name="filePath"></param>
-        public void Download(string filePath)
+        public override void Download(string filePath)
         {
             lock (_locker)
             {
@@ -323,7 +271,7 @@ namespace PuttySSHnet46
         /// </summary>
         /// <param name="filePath"></param>
         /// <param name="localDirectory"></param>
-        public void Download(string filePath, string localDirectory)
+        public override void Download(string filePath, string localDirectory)
         {
             lock (_locker)
             {
@@ -341,14 +289,14 @@ namespace PuttySSHnet46
                 download(filePath);
             }
         }
-        
+
         /// <summary>
         /// Thread-Safe method to Download several file, 
         /// It either download files respecting the pattern or not based on the file path
         /// </summary>
         /// <param name="filePath"></param>
         /// <param name="localDirectory"></param>
-        public void DownloadMany(string[] filesPath, string pattern = null)
+        public override void DownloadMany(string[] filesPath, string pattern = null)
         {
             lock (_locker)
             {
@@ -372,7 +320,7 @@ namespace PuttySSHnet46
         /// <param name="filesPath"></param>
         /// <param name="localDirectory"></param>
         /// <param name="pattern"></param>
-        public void DownloadMany(string[] filesPath, string localDirectory, string pattern = null)
+        public override void DownloadMany(string[] filesPath, string localDirectory, string pattern = null)
         {
             lock (_locker)
             {
