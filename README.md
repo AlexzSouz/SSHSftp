@@ -18,8 +18,8 @@ This API uses [PSFTP] developed by [these fellas].
  - Inversion of Control container using [Unity 4.0.1]
  - Dependency overriden
  - Disposable Connection establisher
- - Download single or multiple files (<get> <mget> commands)
- - Local folder setter (<!> command)
+ - Download single or multiple files (get, mget commands)
+ - Local folder setter (! command)
 
 ### More About PSFTP
 
