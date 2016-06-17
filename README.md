@@ -29,5 +29,5 @@ Copyright © 2016
 
 [Unity 4.0.1]: https://github.com/unitycontainer/unity
 [PSFTP]: http://www.chiark.greenend.org.uk/~sgtatham/putty/
-[Putty-Team]: http://www.chiark.greenend.org.uk/~sgtatham/putty/team.html
+[this fellas]: http://www.chiark.greenend.org.uk/~sgtatham/putty/team.html
 [visit here] http://www.chiark.greenend.org.uk/
