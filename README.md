@@ -2,7 +2,7 @@
 
 SSHSFTP is a API which helps you start SSH connection and transfer data securely through the network.
 
-This API uses [PSFTP] developed by [this fellas].
+This API uses [PSFTP] developed by [these fellas].
 
 ## Get Started
 
