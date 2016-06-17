@@ -6,7 +6,7 @@ This API uses [PSFTP] developed by [these fellas].
 
 ## Get Started
 
-TODO : Add steps in here
+// TODO : More details will be add soon regarind how to use the SSHSFTP nuget package.
 
 ## Versions
 
@@ -17,9 +17,9 @@ TODO : Add steps in here
 
  - Inversion of Control container using [Unity 4.0.1]
  - Dependency overriden
- - Connection establisher disposable
- - Download single or multiple files
- - Local folder setter
+ - Disposable Connection establisher
+ - Download single or multiple files (<get> <mget> commands)
+ - Local folder setter (<!> command)
 
 ### More About PSFTP
 
@@ -29,5 +29,5 @@ Copyright © 2016
 
 [Unity 4.0.1]: https://github.com/unitycontainer/unity
 [PSFTP]: http://www.chiark.greenend.org.uk/~sgtatham/putty/
-[this fellas]: http://www.chiark.greenend.org.uk/~sgtatham/putty/team.html
+[these fellas]: http://www.chiark.greenend.org.uk/~sgtatham/putty/team.html
 [visit here] http://www.chiark.greenend.org.uk/
