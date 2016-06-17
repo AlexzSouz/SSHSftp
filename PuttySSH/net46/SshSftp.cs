@@ -7,28 +7,23 @@ using PuttySSHnet46.Enums;
 
 namespace PuttySSHnet46
 {
-    public class SshSftp
+    public sealed class SshSftp : SshSftpBase, IDisposable
     {
         #region Fields
 
-        object _locker = new object();
-        string _setDirectory = string.Empty;
+        private Process _processSession;
 
-        private readonly Process _processSession;
-        private readonly IDirectoryManager _directoryManager;
+        private string _ipAddress;
+        private string _username;
+        private string _password;
 
-        protected readonly Func<ThreadResetEventSlim> GetThreadResetEventSlim =
-            () => IoC.ResolveType<ThreadResetEventSlim>();
-
-        internal Func<string, bool> IsIPAddressValid = (ipAddress) =>
+        /// <summary>
+        /// Validate IP address received for connection
+        /// </summary>
+        internal Func<string, bool> IsValidIPAddress = (ipAddress) =>
         {
-            IPAddress validIpAddress;
-            IPAddress.TryParse(ipAddress, out validIpAddress);
-
-            return validIpAddress != null;
+            return IoC.ResolveType<IIpAddressValidator>().IsValid(ipAddress);
         };
-
-        public Process ProccessSession => _processSession;
 
         #endregion
 
@@ -36,21 +31,16 @@ namespace PuttySSHnet46
 
         public SshSftp()
         {
-            // Manage dependencies in here
+            // Manage provided Dependencies in here
             _directoryManager = IoC.ResolveType<IDirectoryManager>();
         }
-        
+
         public SshSftp(string ipAddress, string username, string password)
             : this()
         {
             if (string.IsNullOrWhiteSpace(ipAddress))
             {
                 throw new ArgumentNullException(nameof(ipAddress));
-            }
-
-            if (!IsIPAddressValid(ipAddress))
-            {
-                throw new InvalidIPAddressException(ipAddress);
             }
 
             if (string.IsNullOrWhiteSpace(username))
@@ -63,27 +53,13 @@ namespace PuttySSHnet46
                 throw new ArgumentNullException(nameof(password));
             }
 
-            // Executes a SSH OPEN
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "PSFTP.EXE",
-                Arguments = $@"-l {username} -pw {password} {ipAddress}",
-                UseShellExecute = false,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-
-            _processSession = Process.Start(startInfo);
-
-            if (_processSession == null)
-            {
-                throw new NullReferenceException("The session is null");
-            }
+            _ipAddress = ipAddress;
+            _username = username;
+            _password = password;
         }
-        
+
         public SshSftp(string ipAddress, string username, string password, string localPath)
-            : this (ipAddress, username, password)
+            : this(ipAddress, username, password)
         {
             if (string.IsNullOrWhiteSpace(localPath))
             {
@@ -92,17 +68,123 @@ namespace PuttySSHnet46
 
             SetLocalDirectory(localPath);
         }
-
+        
         ~SshSftp()
         {
-            //_processSession.StandardInput.WriteLine("quit");
-            _processSession.WaitForExit();
-            _processSession.Close();
+            this.Dispose();
         }
 
         #endregion
 
         #region Methods
+
+        private void processDataReceived(Action<string> callback)
+        {
+            _processSession.OutputDataReceived += delegate (object sender, DataReceivedEventArgs e)
+            {
+                callback(e.Data);
+            };
+        }
+        
+        private void download(string path, string pattern = null)
+        {
+            lock (_locker)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    throw new ArgumentNullException(nameof(path));
+                }
+
+                bool isPathNotFoundException = false;
+                string exceptionMessage = string.Empty;
+
+                _processSession.BeginOutputReadLine();
+                var localResetEventSlim = GetThreadResetEventSlim();
+
+                processDataReceived(data =>
+                {
+                    if (data.Contains("no such file or directory"))
+                    {
+                        isPathNotFoundException = true;
+                        exceptionMessage = data;
+                    }
+
+                    localResetEventSlim.Set();
+                });
+
+                var command = (pattern == null) ? $"get {path}" : $"mget {path}/{pattern}";
+
+                _processSession.StandardInput.WriteLine(command);
+                localResetEventSlim.Wait();
+
+                _processSession.CancelOutputRead();
+
+                if (isPathNotFoundException)
+                {
+                    throw new SftpPathNotFoundException(exceptionMessage);
+                }
+            }
+        }
+
+        /// <summary>
+        /// IDisposable method to initialize a SSH connection
+        /// SSH Connection [Simple]: PSFTP.EXE -l {username} -pw {password} {192.168.0.1}
+        /// </summary>
+        /// <returns></returns>
+        public IDisposable Connect()
+        {
+            // TODO : Move it from here
+            if (!IsValidIPAddress(_ipAddress))
+            {
+                throw new InvalidIPAddressException(_ipAddress);
+            }
+
+            // TODO : Decouple ProcessStartInfo and Process
+
+            // Executes a SSH OPEN
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "PSFTP.EXE",
+                Arguments = $@"-l {_username} -pw {_password} {_ipAddress}",
+                UseShellExecute = false,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            _processSession = Process.Start(startInfo);
+
+            if (_processSession == null)
+            {
+                throw new NullReferenceException("The session is null");
+            }
+
+            return this;
+        }
+        
+        /// <summary>
+        /// Thread-Sage method to close SSH connection
+        /// </summary>
+        public void Close()
+        {
+            lock (_locker)
+            {
+                this.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Method to override default Dependencies used by SshSftp
+        /// </summary>
+        /// <typeparam name="TBase"></typeparam>
+        /// <typeparam name="TProvider"></typeparam>
+        public void OverrideProvider<TBase, TProvider>()
+            where TBase : class
+            where TProvider : class, TBase
+        {
+            IoC.RegisterType<TBase, TProvider>();
+        }
 
         /// <summary>
         /// Thread-Safe method to set the LOCAL directory path
@@ -131,7 +213,7 @@ namespace PuttySSHnet46
 
                 _processSession.StandardInput.WriteLine($"lcd {directoryPath}");
                 localResetEventSlim.Wait();
-                
+
                 _processSession.CancelOutputRead();
 
                 if (isPathNotFoundException)
@@ -140,7 +222,7 @@ namespace PuttySSHnet46
                 }
             }
         }
-        
+
         /// <summary>
         /// Thread-Safe method to load a Directory or a File (Explicit) as directory
         /// </summary>
@@ -171,7 +253,7 @@ namespace PuttySSHnet46
                             isPathNotFoundException = true;
                             exceptionMessage = data;
                         }
-                        
+
                         localResetEventSlim.Set();
                     });
 
@@ -217,26 +299,10 @@ namespace PuttySSHnet46
                 {
                     // TODO : Add logging in here using a logging provider
                     return false;
-                } 
-            }
-        }
-
-        /// <summary>
-        /// Thread-Sage method to close SSH connection
-        /// </summary>
-        public void Close()
-        {
-            lock (_locker)
-            {
-                if (_processSession.HasExited)
-                {
-                    return;
                 }
-
-                _processSession.StandardInput.WriteLine("quit"); 
             }
         }
-
+                
         /// <summary>
         /// Thread-Safe method to Download a file to LOCAL Environment Directory
         /// </summary>
@@ -245,37 +311,10 @@ namespace PuttySSHnet46
         {
             lock (_locker)
             {
-                if (string.IsNullOrWhiteSpace(filePath))
-                {
-                    throw new ArgumentNullException(nameof(filePath));
-                }
+                // Protective programming (Fail-Fast) not required in here
+                // as it's a single file and private method download handles it
 
-                bool isPathNotFoundException = false;
-                string exceptionMessage = string.Empty;
-
-                _processSession.BeginOutputReadLine();
-                var localResetEventSlim = GetThreadResetEventSlim();
-
-                processDataReceived(data =>
-                {
-                    if (data.Contains("no such file or directory"))
-                    {
-                        isPathNotFoundException = true;
-                        exceptionMessage = data;
-                    }
-
-                    localResetEventSlim.Set();
-                });
-                
-                _processSession.StandardInput.WriteLine($"get {filePath}");
-                localResetEventSlim.Wait();
-
-                _processSession.CancelOutputRead();
-
-                if (isPathNotFoundException)
-                {
-                    throw new SftpPathNotFoundException(exceptionMessage);
-                }
+                download(filePath);
             }
         }
 
@@ -299,28 +338,79 @@ namespace PuttySSHnet46
                 }
 
                 SetLocalDirectory(localDirectory);
-                Download(filePath);
+                download(filePath);
+            }
+        }
+        
+        /// <summary>
+        /// Thread-Safe method to Download several file, 
+        /// It either download files respecting the pattern or not based on the file path
+        /// </summary>
+        /// <param name="filePath"></param>
+        /// <param name="localDirectory"></param>
+        public void DownloadMany(string[] filesPath, string pattern = null)
+        {
+            lock (_locker)
+            {
+                if(filesPath == null)
+                {
+                    throw new ArgumentNullException(nameof(filesPath));
+                }
+                
+                foreach (var path in filesPath)
+                {
+                    download(path, pattern);
+                }
             }
         }
 
-        public void DownloadMany(string filePath, string pattern = null)
+        /// <summary>
+        /// Thread-Safe method to Download several file, 
+        /// It either download files respecting the pattern or not based on the file path
+        /// Download files to a specified LOCAL Directory
+        /// </summary>
+        /// <param name="filesPath"></param>
+        /// <param name="localDirectory"></param>
+        /// <param name="pattern"></param>
+        public void DownloadMany(string[] filesPath, string localDirectory, string pattern = null)
         {
-            // MGET
-        }
-
-        public void DownloadMany(string[] filesPath, string pattern = null)
-        {
-            // MGET
-        }
-
-        private void processDataReceived(Action<string> callback)
-        {
-            _processSession.OutputDataReceived += delegate (object sender, DataReceivedEventArgs e)
+            lock (_locker)
             {
-                callback(e.Data);
-            };
+                if (filesPath == null)
+                {
+                    throw new ArgumentNullException(nameof(filesPath));
+                }
+
+                SetLocalDirectory(localDirectory);
+
+                foreach (var path in filesPath)
+                {
+                    download(path, pattern);
+                }
+            }
         }
-        
+
+        /// <summary>
+        /// Method to Dispose object from memory
+        /// </summary>
+        public void Dispose()
+        {
+            try
+            {
+                if (_processSession != null && !_processSession.HasExited)
+                {
+                    _processSession.StandardInput.WriteLine("quit");
+                    
+                    _processSession.Close();
+                    _processSession.Dispose();
+                }
+            }
+            catch (Exception)
+            {
+                // NOOP : No process is associated with this object anymore.
+            }
+        }
+
         #endregion
     }
 }

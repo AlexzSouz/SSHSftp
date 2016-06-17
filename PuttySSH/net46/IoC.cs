@@ -1,7 +1,6 @@
 ﻿using PuttySSHnet46.Providers;
 using Microsoft.Practices.Unity;
-using ConsoleApp;
-using System;
+using System.Net;
 
 namespace PuttySSHnet46
 {
@@ -24,12 +23,27 @@ namespace PuttySSHnet46
 
             // Register
             _container.RegisterType<ThreadResetEventSlim, ManualResetEventSlimProvider>();
-            _container.RegisterType<IDirectoryManager, DirectoryManager>();
+
+            _container.RegisterType<IDirectoryManager, DirectoryManagerProvider>();
+            _container.RegisterType<IIpAddressValidator, IPAddressValidatorProvider>();
         }
 
         #endregion
 
         #region Methods
+
+        /// <summary>
+        /// Method to register a new type for a existing one
+        /// It does not accept Structs (struct), only Classes (class)
+        /// </summary>
+        /// <typeparam name="TFrom"></typeparam>
+        /// <typeparam name="TTo"></typeparam>
+        public static void RegisterType<TFrom, TTo>() 
+            where TFrom : class
+            where TTo : class, TFrom
+        {
+            _container.RegisterType<TFrom, TTo>(new TransientLifetimeManager());
+        }
 
         /// <summary>
         /// Resolve a dependency by <T> type

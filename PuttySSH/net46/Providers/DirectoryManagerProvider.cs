@@ -2,7 +2,7 @@
 
 namespace PuttySSHnet46.Providers
 {
-    public class DirectoryManager : IDirectoryManager
+    public class DirectoryManagerProvider : IDirectoryManager
     {
         #region Methods
 
